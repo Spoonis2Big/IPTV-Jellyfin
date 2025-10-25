@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Xtream Codes</title>
+</head>
+<body>
+    <div id="XtreamCodesConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="XtreamCodesConfigForm">
+                    <div class="verticalSection">
+                        <h2>Xtream Codes Configuration</h2>
+                        <p>Configure your Xtream Codes API servers below. You can add multiple servers.</p>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h3>DVR Settings</h3>
+
+                        <div class="checkboxContainer">
+                            <label>
+                                <input is="emby-checkbox" type="checkbox" id="enableDvr" />
+                                Enable DVR (Digital Video Recorder)
+                            </label>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label for="recordingPath">Custom Recording Path (leave empty for default):</label>
+                            <input is="emby-input" type="text" id="recordingPath" placeholder="/path/to/recordings" />
+                            <div class="fieldDescription">If empty, recordings will be stored in the default Jellyfin data directory</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label for="prePaddingSeconds">Pre-Padding (seconds):</label>
+                            <input is="emby-input" type="number" id="prePaddingSeconds" min="0" max="3600" />
+                            <div class="fieldDescription">Start recording this many seconds before the program starts</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label for="postPaddingSeconds">Post-Padding (seconds):</label>
+                            <input is="emby-input" type="number" id="postPaddingSeconds" min="0" max="3600" />
+                            <div class="fieldDescription">Continue recording this many seconds after the program ends</div>
+                        </div>
+                    </div>
+
+                    <div id="serversContainer" class="verticalSection">
+                        <!-- Server configurations will be added here dynamically -->
+                    </div>
+
+                    <div class="verticalSection">
+                        <button is="emby-button" type="button" id="addServerButton" class="raised button-submit block">
+                            <span>Add Server</span>
+                        </button>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            var XtreamCodesConfig = {
+                pluginId: "a7d4b7e2-8c3f-4d5a-9b1e-3f4c5d6e7f8a",
+
+                loadConfiguration: function() {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(XtreamCodesConfig.pluginId).then(function(config) {
+                        XtreamCodesConfig.config = config;
+
+                        // Load DVR settings
+                        document.getElementById('enableDvr').checked = config.EnableDvr !== false;
+                        document.getElementById('recordingPath').value = config.RecordingPath || '';
+                        document.getElementById('prePaddingSeconds').value = config.PrePaddingSeconds || 60;
+                        document.getElementById('postPaddingSeconds').value = config.PostPaddingSeconds || 300;
+
+                        XtreamCodesConfig.renderServers();
+                        Dashboard.hideLoadingMsg();
+                    });
+                },
+
+                renderServers: function() {
+                    var container = document.getElementById('serversContainer');
+                    container.innerHTML = '';
+
+                    var servers = XtreamCodesConfig.config.Servers || [];
+                    servers.forEach(function(server, index) {
+                        XtreamCodesConfig.addServerFields(container, server, index);
+                    });
+                },
+
+                addServerFields: function(container, server, index) {
+                    server = server || {};
+                    var html = '<div class="verticalSection serverSection" style="border: 1px solid #444; padding: 1em; margin-bottom: 1em; border-radius: 4px;">';
+                    html += '<h3>Server ' + (index + 1) + '</h3>';
+
+                    html += '<div class="inputContainer">';
+                    html += '<label for="serverName' + index + '">Server Name:</label>';
+                    html += '<input is="emby-input" type="text" id="serverName' + index + '" class="serverName" value="' + (server.Name || '') + '" />';
+                    html += '</div>';
+
+                    html += '<div class="inputContainer">';
+                    html += '<label for="serverUrl' + index + '">Server URL:</label>';
+                    html += '<input is="emby-input" type="text" id="serverUrl' + index + '" class="serverUrl" value="' + (server.Url || '') + '" placeholder="http://example.com:8080" />';
+                    html += '</div>';
+
+                    html += '<div class="inputContainer">';
+                    html += '<label for="serverUsername' + index + '">Username:</label>';
+                    html += '<input is="emby-input" type="text" id="serverUsername' + index + '" class="serverUsername" value="' + (server.Username || '') + '" />';
+                    html += '</div>';
+
+                    html += '<div class="inputContainer">';
+                    html += '<label for="serverPassword' + index + '">Password:</label>';
+                    html += '<input is="emby-input" type="password" id="serverPassword' + index + '" class="serverPassword" value="' + (server.Password || '') + '" />';
+                    html += '</div>';
+
+                    html += '<div class="checkboxContainer">';
+                    html += '<label><input is="emby-checkbox" type="checkbox" class="importLiveTv" ' + (server.ImportLiveTv !== false ? 'checked' : '') + ' /> Import Live TV</label>';
+                    html += '</div>';
+
+                    html += '<div class="checkboxContainer">';
+                    html += '<label><input is="emby-checkbox" type="checkbox" class="importVod" ' + (server.ImportVod !== false ? 'checked' : '') + ' /> Import VOD (Movies)</label>';
+                    html += '</div>';
+
+                    html += '<div class="checkboxContainer">';
+                    html += '<label><input is="emby-checkbox" type="checkbox" class="importSeries" ' + (server.ImportSeries !== false ? 'checked' : '') + ' /> Import Series (TV Shows)</label>';
+                    html += '</div>';
+
+                    html += '<button is="emby-button" type="button" class="raised button-cancel removeServerButton" data-index="' + index + '">Remove Server</button>';
+                    html += '</div>';
+
+                    container.insertAdjacentHTML('beforeend', html);
+                },
+
+                saveConfiguration: function() {
+                    Dashboard.showLoadingMsg();
+
+                    // Save DVR settings
+                    XtreamCodesConfig.config.EnableDvr = document.getElementById('enableDvr').checked;
+                    XtreamCodesConfig.config.RecordingPath = document.getElementById('recordingPath').value;
+                    XtreamCodesConfig.config.PrePaddingSeconds = parseInt(document.getElementById('prePaddingSeconds').value) || 60;
+                    XtreamCodesConfig.config.PostPaddingSeconds = parseInt(document.getElementById('postPaddingSeconds').value) || 300;
+
+                    var servers = [];
+                    var sections = document.querySelectorAll('.serverSection');
+
+                    sections.forEach(function(section) {
+                        servers.push({
+                            Name: section.querySelector('.serverName').value,
+                            Url: section.querySelector('.serverUrl').value,
+                            Username: section.querySelector('.serverUsername').value,
+                            Password: section.querySelector('.serverPassword').value,
+                            ImportLiveTv: section.querySelector('.importLiveTv').checked,
+                            ImportVod: section.querySelector('.importVod').checked,
+                            ImportSeries: section.querySelector('.importSeries').checked
+                        });
+                    });
+
+                    XtreamCodesConfig.config.Servers = servers;
+
+                    ApiClient.updatePluginConfiguration(XtreamCodesConfig.pluginId, XtreamCodesConfig.config).then(function() {
+                        Dashboard.processPluginConfigurationUpdateResult();
+                    });
+                }
+            };
+
+            document.getElementById('XtreamCodesConfigForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                XtreamCodesConfig.saveConfiguration();
+                return false;
+            });
+
+            document.getElementById('addServerButton').addEventListener('click', function() {
+                var container = document.getElementById('serversContainer');
+                var index = document.querySelectorAll('.serverSection').length;
+                XtreamCodesConfig.addServerFields(container, null, index);
+            });
+
+            document.getElementById('serversContainer').addEventListener('click', function(e) {
+                if (e.target.classList.contains('removeServerButton')) {
+                    e.target.closest('.serverSection').remove();
+                }
+            });
+
+            XtreamCodesConfig.loadConfiguration();
+        </script>
+    </div>
+</body>
+</html>

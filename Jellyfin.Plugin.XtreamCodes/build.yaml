@@ -1,0 +1,19 @@
+---
+name: "Jellyfin.Plugin.XtreamCodes"
+guid: "a7d4b7e2-8c3f-4d5a-9b1e-3f4c5d6e7f8a"
+version: "1.0.0"
+targetAbi: "10.9.0.0"
+framework: "net8.0"
+owner: "jellyfin"
+overview: "Xtream Codes IPTV Integration"
+description: "Provides integration with Xtream Codes API for Live TV, VOD, and Series"
+category: "LiveTV"
+artifacts:
+  - "Jellyfin.Plugin.XtreamCodes.dll"
+changelog: |
+  ## 1.0.0
+  - Initial release
+  - Live TV support
+  - VOD (Movies) support
+  - Series (TV Shows) support
+  - Multiple server configuration
