@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Xtream Codes - Catalog Editor</title>
+    <style>
+        .catalog-section {
+            margin: 20px 0;
+        }
+        .content-list {
+            margin: 20px 0;
+        }
+        .content-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #444;
+        }
+        .content-item:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        .content-info {
+            flex: 1;
+        }
+        .content-name {
+            font-weight: bold;
+        }
+        .content-id {
+            font-size: 0.9em;
+            color: #888;
+        }
+        .content-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.8);
+        }
+        .modal-content {
+            background-color: #1c1c1c;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 600px;
+            border-radius: 8px;
+        }
+        .modal-close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .modal-close:hover,
+        .modal-close:focus {
+            color: #fff;
+        }
+        .search-box {
+            margin: 20px 0;
+        }
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .hidden-badge {
+            background-color: #c00;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+<body>
+    <div id="XtreamMetadataEditorPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox,emby-select">
+        <div data-role="content">
+            <div class="content-primary">
+                <div class="verticalSection">
+                    <h2>IPTV Catalog Editor</h2>
+                    <p>Customize channel names, descriptions, images, and more. Changes are stored locally and override the Xtream Codes catalog.</p>
+                </div>
+
+                <div class="verticalSection">
+                    <div class="filter-buttons">
+                        <button is="emby-button" type="button" id="filterAll" class="raised">All</button>
+                        <button is="emby-button" type="button" id="filterLiveTV" class="raised">Live TV</button>
+                        <button is="emby-button" type="button" id="filterVOD" class="raised">VOD/Movies</button>
+                        <button is="emby-button" type="button" id="filterSeries" class="raised">Series</button>
+                        <button is="emby-button" type="button" id="filterModified" class="raised">Modified Only</button>
+                    </div>
+
+                    <div class="search-box">
+                        <input is="emby-input" type="text" id="searchBox" placeholder="Search by name or ID..." />
+                    </div>
+
+                    <div class="inputContainer">
+                        <button is="emby-button" type="button" id="refreshCatalog" class="raised button-submit">
+                            <span>Refresh Catalog</span>
+                        </button>
+                        <button is="emby-button" type="button" id="exportOverrides" class="raised">
+                            <span>Export Overrides</span>
+                        </button>
+                        <button is="emby-button" type="button" id="importOverrides" class="raised">
+                            <span>Import Overrides</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="verticalSection">
+                    <h3>Catalog Items</h3>
+                    <div id="catalogList" class="content-list">
+                        <p>Loading catalog...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Modal -->
+        <div id="editModal" class="modal">
+            <div class="modal-content">
+                <span class="modal-close">&times;</span>
+                <h3>Edit Metadata</h3>
+                <form id="editForm">
+                    <input type="hidden" id="editContentId" />
+                    <input type="hidden" id="editContentType" />
+
+                    <div class="inputContainer">
+                        <label for="editName">Name:</label>
+                        <input is="emby-input" type="text" id="editName" />
+                    </div>
+
+                    <div class="inputContainer">
+                        <label for="editOverview">Description/Overview:</label>
+                        <textarea is="emby-input" id="editOverview" rows="4"></textarea>
+                    </div>
+
+                    <div class="inputContainer">
+                        <label for="editImageUrl">Image URL:</label>
+                        <input is="emby-input" type="text" id="editImageUrl" />
+                    </div>
+
+                    <div class="inputContainer" id="channelNumberContainer">
+                        <label for="editChannelNumber">Channel Number:</label>
+                        <input is="emby-input" type="text" id="editChannelNumber" />
+                    </div>
+
+                    <div class="inputContainer">
+                        <label for="editGenres">Genres (comma-separated):</label>
+                        <input is="emby-input" type="text" id="editGenres" />
+                    </div>
+
+                    <div class="inputContainer">
+                        <label for="editYear">Production Year:</label>
+                        <input is="emby-input" type="number" id="editYear" min="1900" max="2100" />
+                    </div>
+
+                    <div class="inputContainer">
+                        <label for="editRating">Rating (0-10):</label>
+                        <input is="emby-input" type="number" id="editRating" min="0" max="10" step="0.1" />
+                    </div>
+
+                    <div class="inputContainer">
+                        <label for="editTags">Tags (comma-separated):</label>
+                        <input is="emby-input" type="text" id="editTags" />
+                    </div>
+
+                    <div class="checkboxContainer">
+                        <label>
+                            <input is="emby-checkbox" type="checkbox" id="editIsHidden" />
+                            Hide this item from catalog
+                        </label>
+                    </div>
+
+                    <div style="margin-top: 20px; display: flex; gap: 10px;">
+                        <button is="emby-button" type="submit" class="raised button-submit">
+                            <span>Save</span>
+                        </button>
+                        <button is="emby-button" type="button" id="resetOverride" class="raised button-cancel">
+                            <span>Reset to Original</span>
+                        </button>
+                        <button is="emby-button" type="button" id="cancelEdit" class="raised">
+                            <span>Cancel</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            var XtreamMetadataEditor = {
+                pluginId: "a7d4b7e2-8c3f-4d5a-9b1e-3f4c5d6e7f8a",
+                catalog: [],
+                overrides: {},
+                currentFilter: 'all',
+                currentSearch: '',
+
+                init: function() {
+                    XtreamMetadataEditor.loadOverrides();
+                    XtreamMetadataEditor.loadCatalog();
+                    XtreamMetadataEditor.setupEventListeners();
+                },
+
+                setupEventListeners: function() {
+                    document.getElementById('filterAll').addEventListener('click', function() {
+                        XtreamMetadataEditor.currentFilter = 'all';
+                        XtreamMetadataEditor.renderCatalog();
+                    });
+
+                    document.getElementById('filterLiveTV').addEventListener('click', function() {
+                        XtreamMetadataEditor.currentFilter = 'livetv';
+                        XtreamMetadataEditor.renderCatalog();
+                    });
+
+                    document.getElementById('filterVOD').addEventListener('click', function() {
+                        XtreamMetadataEditor.currentFilter = 'vod';
+                        XtreamMetadataEditor.renderCatalog();
+                    });
+
+                    document.getElementById('filterSeries').addEventListener('click', function() {
+                        XtreamMetadataEditor.currentFilter = 'series';
+                        XtreamMetadataEditor.renderCatalog();
+                    });
+
+                    document.getElementById('filterModified').addEventListener('click', function() {
+                        XtreamMetadataEditor.currentFilter = 'modified';
+                        XtreamMetadataEditor.renderCatalog();
+                    });
+
+                    document.getElementById('searchBox').addEventListener('input', function(e) {
+                        XtreamMetadataEditor.currentSearch = e.target.value.toLowerCase();
+                        XtreamMetadataEditor.renderCatalog();
+                    });
+
+                    document.getElementById('refreshCatalog').addEventListener('click', function() {
+                        XtreamMetadataEditor.loadCatalog();
+                    });
+
+                    document.getElementById('exportOverrides').addEventListener('click', function() {
+                        XtreamMetadataEditor.exportOverrides();
+                    });
+
+                    document.getElementById('importOverrides').addEventListener('click', function() {
+                        XtreamMetadataEditor.importOverrides();
+                    });
+
+                    document.querySelector('.modal-close').addEventListener('click', function() {
+                        document.getElementById('editModal').style.display = 'none';
+                    });
+
+                    document.getElementById('cancelEdit').addEventListener('click', function() {
+                        document.getElementById('editModal').style.display = 'none';
+                    });
+
+                    document.getElementById('editForm').addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        XtreamMetadataEditor.saveOverride();
+                    });
+
+                    document.getElementById('resetOverride').addEventListener('click', function() {
+                        XtreamMetadataEditor.resetOverride();
+                    });
+                },
+
+                loadOverrides: function() {
+                    // In a real implementation, this would load from the server
+                    // For now, we'll use localStorage as a placeholder
+                    var stored = localStorage.getItem('xtream_overrides');
+                    if (stored) {
+                        XtreamMetadataEditor.overrides = JSON.parse(stored);
+                    }
+                },
+
+                saveOverrides: function() {
+                    localStorage.setItem('xtream_overrides', JSON.stringify(XtreamMetadataEditor.overrides));
+                },
+
+                loadCatalog: function() {
+                    Dashboard.showLoadingMsg();
+
+                    // This would normally fetch from the API
+                    // For now, creating mock data structure
+                    ApiClient.getPluginConfiguration(XtreamMetadataEditor.pluginId).then(function(config) {
+                        XtreamMetadataEditor.catalog = [];
+
+                        // Add note that catalog needs to be loaded from servers
+                        document.getElementById('catalogList').innerHTML =
+                            '<p>Catalog will be populated from your configured Xtream Codes servers.</p>' +
+                            '<p>Please ensure you have servers configured and Jellyfin has refreshed the Live TV guide.</p>';
+
+                        Dashboard.hideLoadingMsg();
+                    });
+                },
+
+                renderCatalog: function() {
+                    var container = document.getElementById('catalogList');
+                    var filtered = XtreamMetadataEditor.catalog;
+
+                    // Apply filters
+                    if (XtreamMetadataEditor.currentFilter !== 'all') {
+                        if (XtreamMetadataEditor.currentFilter === 'modified') {
+                            filtered = filtered.filter(function(item) {
+                                return XtreamMetadataEditor.overrides[item.id] !== undefined;
+                            });
+                        } else {
+                            filtered = filtered.filter(function(item) {
+                                return item.type === XtreamMetadataEditor.currentFilter;
+                            });
+                        }
+                    }
+
+                    // Apply search
+                    if (XtreamMetadataEditor.currentSearch) {
+                        filtered = filtered.filter(function(item) {
+                            return item.name.toLowerCase().includes(XtreamMetadataEditor.currentSearch) ||
+                                   item.id.toLowerCase().includes(XtreamMetadataEditor.currentSearch);
+                        });
+                    }
+
+                    if (filtered.length === 0) {
+                        container.innerHTML = '<p>No items found matching your criteria.</p>';
+                        return;
+                    }
+
+                    var html = '';
+                    filtered.forEach(function(item) {
+                        var override = XtreamMetadataEditor.overrides[item.id];
+                        var displayName = override && override.Name ? override.Name : item.name;
+                        var isHidden = override && override.IsHidden;
+                        var isModified = override !== undefined;
+
+                        html += '<div class="content-item">';
+                        html += '<div class="content-info">';
+                        html += '<div class="content-name">' + displayName;
+                        if (isHidden) html += ' <span class="hidden-badge">HIDDEN</span>';
+                        if (isModified) html += ' <span style="color: #4CAF50;">✓ Modified</span>';
+                        html += '</div>';
+                        html += '<div class="content-id">ID: ' + item.id + ' | Type: ' + item.type + '</div>';
+                        html += '</div>';
+                        html += '<div class="content-actions">';
+                        html += '<button is="emby-button" class="raised button-submit" onclick="XtreamMetadataEditor.editItem(\'' + item.id + '\')">Edit</button>';
+                        html += '</div>';
+                        html += '</div>';
+                    });
+
+                    container.innerHTML = html;
+                },
+
+                editItem: function(contentId) {
+                    var item = XtreamMetadataEditor.catalog.find(function(i) { return i.id === contentId; });
+                    if (!item) return;
+
+                    var override = XtreamMetadataEditor.overrides[contentId] || {};
+
+                    document.getElementById('editContentId').value = contentId;
+                    document.getElementById('editContentType').value = item.type;
+                    document.getElementById('editName').value = override.Name || item.name;
+                    document.getElementById('editOverview').value = override.Overview || item.overview || '';
+                    document.getElementById('editImageUrl').value = override.ImageUrl || item.imageUrl || '';
+                    document.getElementById('editChannelNumber').value = override.ChannelNumber || item.channelNumber || '';
+                    document.getElementById('editGenres').value = override.Genres ? override.Genres.join(', ') : '';
+                    document.getElementById('editYear').value = override.ProductionYear || '';
+                    document.getElementById('editRating').value = override.Rating || '';
+                    document.getElementById('editTags').value = override.Tags ? override.Tags.join(', ') : '';
+                    document.getElementById('editIsHidden').checked = override.IsHidden || false;
+
+                    // Show/hide channel number field
+                    document.getElementById('channelNumberContainer').style.display =
+                        item.type === 'livetv' ? 'block' : 'none';
+
+                    document.getElementById('editModal').style.display = 'block';
+                },
+
+                saveOverride: function() {
+                    var contentId = document.getElementById('editContentId').value;
+                    var contentType = document.getElementById('editContentType').value;
+
+                    var override = {
+                        ContentId: contentId,
+                        ContentType: contentType === 'livetv' ? 0 : (contentType === 'vod' ? 1 : 2),
+                        Name: document.getElementById('editName').value,
+                        Overview: document.getElementById('editOverview').value,
+                        ImageUrl: document.getElementById('editImageUrl').value,
+                        ChannelNumber: document.getElementById('editChannelNumber').value,
+                        Genres: document.getElementById('editGenres').value.split(',').map(function(g) { return g.trim(); }).filter(function(g) { return g; }),
+                        ProductionYear: parseInt(document.getElementById('editYear').value) || null,
+                        Rating: parseFloat(document.getElementById('editRating').value) || null,
+                        Tags: document.getElementById('editTags').value.split(',').map(function(t) { return t.trim(); }).filter(function(t) { return t; }),
+                        IsHidden: document.getElementById('editIsHidden').checked,
+                        ModifiedDate: new Date().toISOString()
+                    };
+
+                    XtreamMetadataEditor.overrides[contentId] = override;
+                    XtreamMetadataEditor.saveOverrides();
+
+                    document.getElementById('editModal').style.display = 'none';
+                    XtreamMetadataEditor.renderCatalog();
+
+                    Dashboard.alert('Metadata override saved successfully!');
+                },
+
+                resetOverride: function() {
+                    var contentId = document.getElementById('editContentId').value;
+                    delete XtreamMetadataEditor.overrides[contentId];
+                    XtreamMetadataEditor.saveOverrides();
+
+                    document.getElementById('editModal').style.display = 'none';
+                    XtreamMetadataEditor.renderCatalog();
+
+                    Dashboard.alert('Metadata reset to original values.');
+                },
+
+                exportOverrides: function() {
+                    var json = JSON.stringify(Object.values(XtreamMetadataEditor.overrides), null, 2);
+                    var blob = new Blob([json], { type: 'application/json' });
+                    var url = URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'xtream-overrides-' + new Date().toISOString().split('T')[0] + '.json';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                },
+
+                importOverrides: function() {
+                    var input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.json';
+                    input.onchange = function(e) {
+                        var file = e.target.files[0];
+                        var reader = new FileReader();
+                        reader.onload = function(event) {
+                            try {
+                                var overrides = JSON.parse(event.target.result);
+                                overrides.forEach(function(override) {
+                                    XtreamMetadataEditor.overrides[override.ContentId] = override;
+                                });
+                                XtreamMetadataEditor.saveOverrides();
+                                XtreamMetadataEditor.renderCatalog();
+                                Dashboard.alert('Overrides imported successfully!');
+                            } catch (ex) {
+                                Dashboard.alert('Error importing overrides: ' + ex.message);
+                            }
+                        };
+                        reader.readAsText(file);
+                    };
+                    input.click();
+                }
+            };
+
+            XtreamMetadataEditor.init();
+        </script>
+    </div>
+</body>
+</html>

@@ -42,8 +42,13 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         {
             new PluginPageInfo
             {
-                Name = Name,
+                Name = "Xtream Codes Settings",
                 EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
+            },
+            new PluginPageInfo
+            {
+                Name = "Catalog Editor",
+                EmbeddedResourcePath = GetType().Namespace + ".Configuration.metadataEditorPage.html"
             }
         };
     }

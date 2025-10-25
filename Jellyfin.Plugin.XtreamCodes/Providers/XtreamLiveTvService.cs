@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.XtreamCodes.Configuration;
 using Jellyfin.Plugin.XtreamCodes.DVR;
+using Jellyfin.Plugin.XtreamCodes.Metadata;
 using Jellyfin.Plugin.XtreamCodes.XtreamAPI;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.LiveTv;
@@ -23,6 +24,7 @@ public class XtreamLiveTvService : ILiveTvService
 {
     private readonly ILogger<XtreamLiveTvService> _logger;
     private readonly RecordingManager _recordingManager;
+    private readonly MetadataManager _metadataManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="XtreamLiveTvService"/> class.
@@ -36,6 +38,10 @@ public class XtreamLiveTvService : ILiveTvService
             new Microsoft.Extensions.Logging.Abstractions.NullLogger<RecordingManager>(),
             appPaths);
         _recordingManager.RecordingStatusChanged += OnRecordingStatusChanged;
+
+        _metadataManager = new MetadataManager(
+            new Microsoft.Extensions.Logging.Abstractions.NullLogger<MetadataManager>(),
+            appPaths);
     }
 
     private void OnRecordingStatusChanged(object? sender, DVR.RecordingStatusChangedEventArgs e)
@@ -78,14 +84,29 @@ public class XtreamLiveTvService : ILiveTvService
 
                 foreach (var stream in streams)
                 {
+                    var channelId = $"xtream_live_{server.Name}_{stream.StreamId}";
+
+                    // Skip if hidden by metadata override
+                    if (_metadataManager.IsHidden(channelId))
+                    {
+                        continue;
+                    }
+
                     var channelInfo = new ChannelInfo
                     {
-                        Id = $"xtream_live_{server.Name}_{stream.StreamId}",
-                        Name = stream.Name ?? "Unknown Channel",
+                        Id = channelId,
+                        Name = _metadataManager.ApplyNameOverride(channelId, stream.Name ?? "Unknown Channel"),
                         Number = stream.Num.ToString(),
-                        ImageUrl = stream.StreamIcon,
+                        ImageUrl = _metadataManager.ApplyImageUrlOverride(channelId, stream.StreamIcon),
                         ChannelType = ChannelType.TV
                     };
+
+                    // Apply custom channel number if set
+                    var metadataOverride = _metadataManager.GetOverride(channelId);
+                    if (metadataOverride != null && !string.IsNullOrEmpty(metadataOverride.ChannelNumber))
+                    {
+                        channelInfo.Number = metadataOverride.ChannelNumber;
+                    }
 
                     channels.Add(channelInfo);
                 }

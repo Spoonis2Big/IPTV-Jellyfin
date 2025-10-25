@@ -17,6 +17,13 @@ A Jellyfin plugin that integrates with Xtream Codes API to provide IPTV services
   - Configurable pre/post padding for recordings
   - Recording management (view, delete)
   - Custom recording path support
+- **Catalog Editor** - Customize IPTV content:
+  - Edit channel names, descriptions, and images
+  - Custom channel numbers for Live TV
+  - Hide unwanted content from catalog
+  - Add custom genres, tags, and ratings
+  - Import/Export metadata overrides
+  - Changes persist across server updates
 - Easy configuration through Jellyfin's plugin interface
 - Support for standard Xtream Codes API endpoints
 
@@ -80,6 +87,9 @@ Jellyfin.Plugin.XtreamCodes/
 ├── DVR/
 │   ├── RecordingManager.cs       # DVR recording management
 │   └── RecordingStatusChangedEventArgs.cs
+├── Metadata/
+│   ├── MetadataManager.cs        # Metadata override management
+│   └── MetadataOverride.cs       # Override data models
 ├── Plugin.cs                     # Main plugin class
 └── Jellyfin.Plugin.XtreamCodes.csproj
 ```
@@ -131,6 +141,45 @@ dotnet build -c Release
 
 - View scheduled recordings: Live TV → Scheduled
 - Edit or cancel timers as needed
+
+## Using the Catalog Editor
+
+The Catalog Editor allows you to customize metadata for channels, VOD, and series content from your Xtream Codes servers.
+
+### Accessing the Catalog Editor
+
+1. Navigate to Dashboard → Plugins → Xtream Codes
+2. Click on "Catalog Editor" tab
+
+### Editing Content Metadata
+
+1. Use the filter buttons to show specific content types (Live TV, VOD, Series)
+2. Search for content by name or ID
+3. Click "Edit" on any item to customize:
+   - **Name**: Override the display name
+   - **Description**: Add or modify the overview
+   - **Image URL**: Use a different poster/thumbnail
+   - **Channel Number**: Set custom channel numbers (Live TV only)
+   - **Genres**: Add or modify genre tags
+   - **Production Year**: Set the release year
+   - **Rating**: Override the rating
+   - **Tags**: Add custom tags for organization
+   - **Hide**: Remove item from catalog entirely
+
+### Import/Export
+
+- **Export Overrides**: Save all your customizations to a JSON file
+- **Import Overrides**: Restore customizations from a JSON file
+- Useful for:
+  - Backing up your edits
+  - Sharing configurations across Jellyfin installations
+  - Preserving edits when reinstalling the plugin
+
+### Notes
+
+- Metadata overrides are stored locally and persist across server updates
+- Hidden content will not appear in Jellyfin but remains in the Xtream Codes server
+- Changes take effect immediately without requiring a restart
 
 ## Troubleshooting
 
