@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,20 +36,10 @@ public class XtreamLiveTvService : ILiveTvService
         _recordingManager = new RecordingManager(
             new Microsoft.Extensions.Logging.Abstractions.NullLogger<RecordingManager>(),
             appPaths);
-        _recordingManager.RecordingStatusChanged += OnRecordingStatusChanged;
 
         _metadataManager = new MetadataManager(
             new Microsoft.Extensions.Logging.Abstractions.NullLogger<MetadataManager>(),
             appPaths);
-    }
-
-    private void OnRecordingStatusChanged(object? sender, DVR.RecordingStatusChangedEventArgs e)
-    {
-        RecordingStatusChanged?.Invoke(this, new MediaBrowser.Model.LiveTv.RecordingStatusChangedEventArgs
-        {
-            RecordingId = e.RecordingId,
-            Status = e.Status
-        });
     }
 
     /// <inheritdoc />
@@ -184,81 +173,9 @@ public class XtreamLiveTvService : ILiveTvService
     }
 
     /// <inheritdoc />
-    public Task<List<MediaSourceInfo>> GetRecordingStreamMediaSources(string recordingId, CancellationToken cancellationToken)
-    {
-        var mediaSources = new List<MediaSourceInfo>();
-        var recording = _recordingManager.GetRecording(recordingId);
-
-        if (recording != null && !string.IsNullOrEmpty(recording.Path) && File.Exists(recording.Path))
-        {
-            var mediaSource = new MediaSourceInfo
-            {
-                Id = recordingId,
-                Path = recording.Path,
-                Protocol = MediaProtocol.File,
-                IsInfiniteStream = false,
-                IsRemote = false,
-                SupportsDirectPlay = true,
-                SupportsDirectStream = true,
-                SupportsTranscoding = true
-            };
-
-            mediaSources.Add(mediaSource);
-        }
-
-        return Task.FromResult(mediaSources);
-    }
-
-    /// <inheritdoc />
-    public Task<MediaSourceInfo> GetRecordingStream(string recordingId, string streamId, CancellationToken cancellationToken)
-    {
-        var sources = GetRecordingStreamMediaSources(recordingId, cancellationToken).Result;
-        return Task.FromResult(sources.FirstOrDefault() ?? new MediaSourceInfo());
-    }
-
-    /// <inheritdoc />
     public Task CloseLiveStream(string id, CancellationToken cancellationToken)
     {
         return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
-    public async Task RecordLiveStream(string id, CancellationToken cancellationToken)
-    {
-        // Get the timer info
-        var timers = _recordingManager.GetTimers();
-        var timer = timers.FirstOrDefault(t => t.Id == id);
-
-        if (timer == null)
-        {
-            _logger.LogWarning("Timer not found for recording: {Id}", id);
-            return;
-        }
-
-        // Get stream URL
-        var streamSources = await GetChannelStreamMediaSources(timer.ChannelId, cancellationToken).ConfigureAwait(false);
-        var streamUrl = streamSources.FirstOrDefault()?.Path;
-
-        if (string.IsNullOrEmpty(streamUrl))
-        {
-            _logger.LogError("Stream URL not found for channel: {ChannelId}", timer.ChannelId);
-            return;
-        }
-
-        // Create program info from timer
-        var programInfo = new ProgramInfo
-        {
-            Id = timer.ProgramId,
-            Name = timer.Name,
-            Overview = timer.Overview,
-            StartDate = timer.StartDate,
-            EndDate = timer.EndDate,
-            ChannelId = timer.ChannelId,
-            SeriesTimerId = timer.SeriesTimerId
-        };
-
-        await _recordingManager.StartRecordingAsync(id, streamUrl, programInfo, cancellationToken).ConfigureAwait(false);
-        _logger.LogInformation("Started recording for timer: {Name}", timer.Name);
     }
 
     /// <inheritdoc />
@@ -266,9 +183,6 @@ public class XtreamLiveTvService : ILiveTvService
     {
         return Task.CompletedTask;
     }
-
-    /// <inheritdoc />
-    public event EventHandler<RecordingStatusChangedEventArgs>? RecordingStatusChanged;
 
     /// <inheritdoc />
     public Task<SeriesTimerInfo> GetNewTimerDefaultsAsync(CancellationToken cancellationToken, ProgramInfo? program = null)
@@ -342,33 +256,4 @@ public class XtreamLiveTvService : ILiveTvService
         return _recordingManager.CancelTimerAsync(timerId);
     }
 
-    /// <inheritdoc />
-    public Task DeleteRecordingAsync(string recordingId, CancellationToken cancellationToken)
-    {
-        return _recordingManager.DeleteRecordingAsync(recordingId);
-    }
-
-    /// <inheritdoc />
-    public Task<IEnumerable<RecordingInfo>> GetRecordingsAsync(CancellationToken cancellationToken)
-    {
-        return Task.FromResult(_recordingManager.GetRecordings());
-    }
-
-    /// <inheritdoc />
-    public Task<ImageStream?> GetChannelImageAsync(string channelId, CancellationToken cancellationToken)
-    {
-        return Task.FromResult<ImageStream?>(null);
-    }
-
-    /// <inheritdoc />
-    public Task<ImageStream?> GetRecordingImageAsync(string recordingId, CancellationToken cancellationToken)
-    {
-        return Task.FromResult<ImageStream?>(null);
-    }
-
-    /// <inheritdoc />
-    public Task<ImageStream?> GetProgramImageAsync(string programId, string channelId, CancellationToken cancellationToken)
-    {
-        return Task.FromResult<ImageStream?>(null);
-    }
 }

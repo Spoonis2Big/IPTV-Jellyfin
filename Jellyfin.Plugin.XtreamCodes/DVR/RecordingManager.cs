@@ -1,13 +1,11 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Common.Configuration;
-using MediaBrowser.Model.LiveTv;
+using MediaBrowser.Controller.LiveTv;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.XtreamCodes.DVR;
@@ -19,8 +17,6 @@ public class RecordingManager
 {
     private readonly ILogger<RecordingManager> _logger;
     private readonly IApplicationPaths _appPaths;
-    private readonly ConcurrentDictionary<string, ActiveRecording> _activeRecordings;
-    private readonly ConcurrentDictionary<string, RecordingInfo> _recordings;
     private readonly ConcurrentDictionary<string, TimerInfo> _timers;
     private readonly ConcurrentDictionary<string, SeriesTimerInfo> _seriesTimers;
     private readonly string _recordingsPath;
@@ -34,175 +30,21 @@ public class RecordingManager
     {
         _logger = logger;
         _appPaths = appPaths;
-        _activeRecordings = new ConcurrentDictionary<string, ActiveRecording>();
-        _recordings = new ConcurrentDictionary<string, RecordingInfo>();
         _timers = new ConcurrentDictionary<string, TimerInfo>();
         _seriesTimers = new ConcurrentDictionary<string, SeriesTimerInfo>();
 
         _recordingsPath = Path.Combine(_appPaths.DataPath, "xtream-recordings");
         Directory.CreateDirectory(_recordingsPath);
 
-        // Load existing recordings
-        LoadRecordings();
+        // Load existing timers
+        LoadTimers();
+        LoadSeriesTimers();
     }
-
-    /// <summary>
-    /// Event raised when recording status changes.
-    /// </summary>
-    public event EventHandler<RecordingStatusChangedEventArgs>? RecordingStatusChanged;
 
     /// <summary>
     /// Gets the recordings path.
     /// </summary>
     public string RecordingsPath => _recordingsPath;
-
-    /// <summary>
-    /// Starts a recording.
-    /// </summary>
-    /// <param name="timerId">Timer ID.</param>
-    /// <param name="streamUrl">Stream URL to record.</param>
-    /// <param name="programInfo">Program information.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Recording ID.</returns>
-    public async Task<string> StartRecordingAsync(string timerId, string streamUrl, ProgramInfo programInfo, CancellationToken cancellationToken)
-    {
-        var recordingId = Guid.NewGuid().ToString("N");
-        var fileName = GetSafeFileName(programInfo.Name ?? "recording", programInfo.StartDate);
-        var filePath = Path.Combine(_recordingsPath, $"{fileName}.ts");
-
-        var recordingInfo = new RecordingInfo
-        {
-            Id = recordingId,
-            TimerId = timerId,
-            Name = programInfo.Name,
-            Overview = programInfo.Overview,
-            StartDate = programInfo.StartDate,
-            EndDate = programInfo.EndDate,
-            ChannelId = programInfo.ChannelId,
-            Status = RecordingStatus.InProgress,
-            Path = filePath,
-            SeriesTimerId = programInfo.SeriesTimerId
-        };
-
-        _recordings[recordingId] = recordingInfo;
-
-        var activeRecording = new ActiveRecording
-        {
-            RecordingInfo = recordingInfo,
-            Process = null,
-            CancellationTokenSource = new CancellationTokenSource()
-        };
-
-        _activeRecordings[recordingId] = activeRecording;
-
-        // Start the recording process
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await RecordStreamAsync(streamUrl, filePath, activeRecording.CancellationTokenSource.Token).ConfigureAwait(false);
-
-                recordingInfo.Status = RecordingStatus.Completed;
-                _logger.LogInformation("Recording completed: {Name}", recordingInfo.Name);
-
-                RecordingStatusChanged?.Invoke(this, new RecordingStatusChangedEventArgs
-                {
-                    RecordingId = recordingId,
-                    Status = RecordingStatus.Completed
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Recording failed: {Name}", recordingInfo.Name);
-                recordingInfo.Status = RecordingStatus.Error;
-
-                RecordingStatusChanged?.Invoke(this, new RecordingStatusChangedEventArgs
-                {
-                    RecordingId = recordingId,
-                    Status = RecordingStatus.Error
-                });
-            }
-            finally
-            {
-                _activeRecordings.TryRemove(recordingId, out _);
-            }
-        }, cancellationToken);
-
-        SaveRecordings();
-        return recordingId;
-    }
-
-    /// <summary>
-    /// Stops a recording.
-    /// </summary>
-    /// <param name="recordingId">Recording ID.</param>
-    /// <returns>Task.</returns>
-    public Task StopRecordingAsync(string recordingId)
-    {
-        if (_activeRecordings.TryGetValue(recordingId, out var activeRecording))
-        {
-            activeRecording.CancellationTokenSource?.Cancel();
-            activeRecording.Process?.Kill();
-
-            if (_recordings.TryGetValue(recordingId, out var recordingInfo))
-            {
-                recordingInfo.Status = RecordingStatus.Completed;
-                SaveRecordings();
-            }
-
-            _logger.LogInformation("Stopped recording: {RecordingId}", recordingId);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <summary>
-    /// Deletes a recording.
-    /// </summary>
-    /// <param name="recordingId">Recording ID.</param>
-    /// <returns>Task.</returns>
-    public Task DeleteRecordingAsync(string recordingId)
-    {
-        if (_recordings.TryRemove(recordingId, out var recordingInfo))
-        {
-            if (!string.IsNullOrEmpty(recordingInfo.Path) && File.Exists(recordingInfo.Path))
-            {
-                try
-                {
-                    File.Delete(recordingInfo.Path);
-                    _logger.LogInformation("Deleted recording file: {Path}", recordingInfo.Path);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to delete recording file: {Path}", recordingInfo.Path);
-                }
-            }
-
-            SaveRecordings();
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <summary>
-    /// Gets all recordings.
-    /// </summary>
-    /// <returns>List of recordings.</returns>
-    public IEnumerable<RecordingInfo> GetRecordings()
-    {
-        return _recordings.Values.ToList();
-    }
-
-    /// <summary>
-    /// Gets a recording by ID.
-    /// </summary>
-    /// <param name="recordingId">Recording ID.</param>
-    /// <returns>Recording info or null.</returns>
-    public RecordingInfo? GetRecording(string recordingId)
-    {
-        _recordings.TryGetValue(recordingId, out var recording);
-        return recording;
-    }
 
     /// <summary>
     /// Creates a timer.
@@ -318,86 +160,31 @@ public class RecordingManager
         return _seriesTimers.Values.ToList();
     }
 
-    private async Task RecordStreamAsync(string streamUrl, string outputPath, CancellationToken cancellationToken)
+    private void LoadTimers()
     {
-        _logger.LogInformation("Starting recording to: {Path}", outputPath);
-
-        // Use ffmpeg to record the stream
-        var processStartInfo = new ProcessStartInfo
-        {
-            FileName = "ffmpeg",
-            Arguments = $"-i \"{streamUrl}\" -c copy -y \"{outputPath}\"",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = new Process { StartInfo = processStartInfo };
-
-        process.Start();
-
-        // Monitor cancellation
-        await Task.Run(() =>
-        {
-            while (!process.HasExited && !cancellationToken.IsCancellationRequested)
-            {
-                Thread.Sleep(1000);
-            }
-
-            if (!process.HasExited)
-            {
-                process.Kill();
-            }
-        }, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static string GetSafeFileName(string name, DateTime startDate)
-    {
-        var safeName = string.Join("_", name.Split(Path.GetInvalidFileNameChars()));
-        var timestamp = startDate.ToString("yyyyMMdd_HHmmss");
-        return $"{safeName}_{timestamp}";
-    }
-
-    private void LoadRecordings()
-    {
-        var metadataFile = Path.Combine(_recordingsPath, "recordings.json");
+        var metadataFile = Path.Combine(_recordingsPath, "timers.json");
         if (File.Exists(metadataFile))
         {
             try
             {
                 var json = File.ReadAllText(metadataFile);
-                var recordings = System.Text.Json.JsonSerializer.Deserialize<List<RecordingInfo>>(json);
+                var timers = System.Text.Json.JsonSerializer.Deserialize<List<TimerInfo>>(json);
 
-                if (recordings != null)
+                if (timers != null)
                 {
-                    foreach (var recording in recordings)
+                    foreach (var timer in timers)
                     {
-                        if (!string.IsNullOrEmpty(recording.Id))
+                        if (!string.IsNullOrEmpty(timer.Id))
                         {
-                            _recordings[recording.Id] = recording;
+                            _timers[timer.Id] = timer;
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to load recordings metadata");
+                _logger.LogError(ex, "Failed to load timers");
             }
-        }
-    }
-
-    private void SaveRecordings()
-    {
-        var metadataFile = Path.Combine(_recordingsPath, "recordings.json");
-        try
-        {
-            var json = System.Text.Json.JsonSerializer.Serialize(_recordings.Values.ToList());
-            File.WriteAllText(metadataFile, json);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to save recordings metadata");
         }
     }
 
@@ -415,6 +202,34 @@ public class RecordingManager
         }
     }
 
+    private void LoadSeriesTimers()
+    {
+        var metadataFile = Path.Combine(_recordingsPath, "series-timers.json");
+        if (File.Exists(metadataFile))
+        {
+            try
+            {
+                var json = File.ReadAllText(metadataFile);
+                var seriesTimers = System.Text.Json.JsonSerializer.Deserialize<List<SeriesTimerInfo>>(json);
+
+                if (seriesTimers != null)
+                {
+                    foreach (var seriesTimer in seriesTimers)
+                    {
+                        if (!string.IsNullOrEmpty(seriesTimer.Id))
+                        {
+                            _seriesTimers[seriesTimer.Id] = seriesTimer;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load series timers");
+            }
+        }
+    }
+
     private void SaveSeriesTimers()
     {
         var metadataFile = Path.Combine(_recordingsPath, "series-timers.json");
@@ -427,12 +242,5 @@ public class RecordingManager
         {
             _logger.LogError(ex, "Failed to save series timers");
         }
-    }
-
-    private class ActiveRecording
-    {
-        public RecordingInfo RecordingInfo { get; set; } = null!;
-        public Process? Process { get; set; }
-        public CancellationTokenSource CancellationTokenSource { get; set; } = null!;
     }
 }
